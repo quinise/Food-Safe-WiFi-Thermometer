@@ -2,11 +2,9 @@ GreenerMeatTherm
 ================
 touch README.md
 
-To commit:
-git init
-git add README.md
-git commit -m "first commit"
-git remote add origin https://github.com/devinercolano/GreenerMeatTherm.git
-git push -u origin master
+http://blogs.evergreen.edu/meat/
+
+http://blogs.evergreen.edu/sosw/projects/
+http://blogs.evergreen.edu/sosw/project-report-2/
 
 The repository for SOS Meat Therm group's code.
