@@ -1,0 +1,182 @@
+#include <WiFiClient.h>
+#include <WiFiServer.h>
+
+/*
+  WiFi Web Server Food Safe Thermometer 
+ 
+ A web server that hosts the website for the Food Safe Thermometer.
+ This sketch will print the IP address of your WiFi Shield (once connected)
+ to the Serial monitor. From there, you can open that address in a web browser
+ to turn on and off the LED on pin 9.
+ 
+ If the IP address of your shield is yourAddress:
+ http://yourAddress/H turns the LED on
+ http://yourAddress/L turns it off
+ 
+ This example is written for a network using WPA encryption. For 
+ WEP or WPA, change the Wifi.begin() call accordingly.
+ 
+ Circuit:
+ * WiFi shield attached
+ * LED attached to pin 9
+ 
+ created 25 Nov 2012
+ by Tom Igoe
+ */
+ 
+#include <SD.h>
+#include <SPI.h>
+#include <WiFi.h>
+
+char ssid[] = "Information Superhighway";      //  your network SSID (name) 
+char pass[] = "@cidbu^n";   // your network password
+int keyIndex = 0;                 // your network key Index number (needed only for WEP)
+int sensorPin = 0; //the analog pin the TMP36's Vout (sense) pin is connected to
+    //the resolution is 10 mV / degree centigrade with a
+    //500 mV offset to allow for negative temperatures
+
+File html_file;
+
+int status = WL_IDLE_STATUS;
+WiFiServer server(80);
+
+void setup() {
+  Serial.begin(9600);      // initialize serial communication
+
+  // check for the presence of the shield:
+  if (WiFi.status() == WL_NO_SHIELD) {
+    Serial.println("WiFi shield not present"); 
+    while(true);        // don't continue
+  } 
+
+  // attempt to connect to Wifi network:
+  while ( status != WL_CONNECTED) { 
+    Serial.print("Attempting to connect to Network named: ");
+    Serial.println(ssid);                   // print the network name (SSID);
+
+    // Connect to WPA/WPA2 network. Change this line if using open or WEP network:    
+    status = WiFi.begin(ssid, pass);
+    // wait 10 seconds for connection:
+    delay(10000);
+  } 
+  server.begin();                           // start the web server on port 80
+  printWifiStatus();                        // you're connected now, so print out the status
+
+  Serial.print("Initializing SD card...");
+  // On the Ethernet Shield, CS is pin 4. It's set as an output by default.
+  // Note that even if it's not used as the CS pin, the hardware SS pin 
+  // (10 on most Arduino boards, 53 on the Mega) must be left as an output 
+  // or the SD library functions will not work. 
+   pinMode(10, OUTPUT);
+   
+  if (!SD.begin(4)) {
+    Serial.println("initialization failed!");
+    return;
+  }
+  Serial.println("initialization done.");
+  File dataFile = SD.open("FSW~1.HTM");
+
+  // if the file is available, write to it:
+  if (dataFile) {
+    while (dataFile.available()) {
+      Serial.write(dataFile.read());
+    }
+    dataFile.close();
+  }  
+  // if the file isn't open, pop up an error:
+  else {
+    Serial.println("error opening FSW~1.HTM");
+  }
+
+}
+
+
+void loop() {
+  WiFiClient client = server.available();   // listen for incoming clients
+
+  //html_file = SD.open("FSWT.HTML");
+  if (client) {                             // if you get a client,
+    Serial.println("new client");           // print a message out the serial port
+    String currentLine = "";                // make a String to hold incoming data from the client
+    while (client.connected()) {            // loop while the client's connected
+      if (client.available()) {             // if there's bytes to read from the client,
+        char c = client.read();             // read a byte, then
+        Serial.write(c);                    // print it out the serial monitor
+        if (c == '\n') {                    // if the byte is a newline character
+
+          // if the current line is blank, you got two newline characters in a row.
+          // that's the end of the client HTTP request, so send a response:
+          if (currentLine.length() == 0) {  
+            // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
+            // and a content-type so the client knows what's coming, then a blank line:    
+            client.println("HTTP/1.1 200 OK");
+            client.println("Content-type:text/html");
+            client.println();
+    html_file = SD.open("FSW~1.HTM");
+    if (html_file) {
+      while(html_file.available()) {
+        client.write(html_file.read());
+      }
+    } else {
+    Serial.println("error opening FSW~1.HTM");
+    } 
+    
+    //getting the voltage reading from the temperature sensor
+    int reading = analogRead(sensorPin);
+    // converting that reading to voltage, for 3.3v arduino use 3.3
+    float voltage = reading * 5.0;
+    voltage /= 1024.0;
+    // print out the voltage
+    client.print(voltage); client.print(" volts"); client.print("\n");
+    // now print out the temperature
+    float temperatureC = (voltage - 0.5) * 100 ; //converting from 10 mv per degree wit 500 mV offset
+    //to degrees ((voltage - 500mV) times 100)
+    client.print(temperatureC); client.print(" degrees C"); client.print("\n");
+    // now convert to Fahrenheit
+    float temperatureF = (temperatureC * 9.0 / 5.0) + 32.0;
+    client.print(temperatureF); client.print(" degrees F"); client.print("\n");
+    
+            // the content of the HTTP response follows the header:
+            //client.print("Click <a href=\"/H\">here</a> turn the LED on pin 9 on<br>");
+            //client.print("Click <a href=\"/L\">here</a> turn the LED on pin 9 off<br>");
+
+            // The HTTP response ends with another blank line:
+            client.println();
+            // break out of the while loop:
+            break;         
+          } 
+          else {      // if you got a newline, then clear currentLine:
+            currentLine = "";
+          }
+        }     
+        else if (c != '\r') {    // if you got anything else but a carriage return character,
+          currentLine += c;      // add it to the end of the currentLine
+        }
+      }
+    }
+    html_file.close();
+    // close the connection:
+    client.stop();
+    Serial.println("client disonnected");
+  }
+}
+
+void printWifiStatus() {
+  // print the SSID of the network you're attached to:
+  Serial.print("SSID: ");
+  Serial.println(WiFi.SSID());
+
+  // print your WiFi shield's IP address:
+  IPAddress ip = WiFi.localIP();
+  Serial.print("IP Address: ");
+  Serial.println(ip);
+
+  // print the received signal strength:
+  long rssi = WiFi.RSSI();
+  Serial.print("signal strength (RSSI):");
+  Serial.print(rssi);
+  Serial.println(" dBm");
+  // print where to go in a browser:
+  Serial.print("To see this page in action, open a browser to http://");
+  Serial.println(ip);
+}
